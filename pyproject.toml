@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "hatchling==1.25.0",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = ""
+version = "0.0.1"
+authors = [
+    {name="Ihor Kostiuk", email="ihor.kostiuk@knu.ua"},
+]
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[tool.flake8]
+max-line-length=88
+exclude = [
+    ".git",
+    "__pycache__"
+]
+extend-ignore = [
+    "E203",
+    "D100",
+    "D104",
+    "ANN101",
+    "ANN102"
+]
+per-file-ignores = """
+    __init__.py: F401
+"""
+
+[tool.numpydoc_validation]
+checks = [
+    "all",   # report on all checks, except the below
+    "EX01",
+    "SA01",
+    "ES01",
+    "GL01",
+    "GL08",
+]
