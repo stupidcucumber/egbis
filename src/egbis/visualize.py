@@ -1,60 +1,33 @@
-import cv2
-import graphviz as gz
-import networkx as nx
 import numpy as np
 from matplotlib.axes import Axes
 
+from egbis.types.component import Component
 
-def draw_segmentation(
-    segmentation: list[nx.Graph], image: np.ndarray, axes: Axes, opacity: float
+
+def draw_components_partition(
+    image: np.ndarray, components: dict[int, Component], axes: Axes, opacity: float
 ) -> None:
-    segmentation_mask = np.zeros_like(image).astype(np.float32)
+    """Draw segmentation of an image.
 
-    for graph in segmentation:
-
-        color = np.random.randint(0, 256, 3) / 255
-
-        for node in graph.nodes:
-            segmentation_mask[node] = color
-
-    result_image = (1 - opacity) * image + opacity * segmentation_mask
-
-    axes.imshow(result_image)
-
-
-def draw_partition_segmentation(
-    partition: np.ndarray, axes: Axes, opacity: float
-) -> None:
-    segmentation_mask = partition[..., -1]
-    image = partition[..., :-1]
-
+    Parameters
+    ----------
+    image : np.ndarray
+        Image that was segmented.
+    components : dict[int, Component]
+        Segmentation parts of an image.
+    axes : Axes
+        Axes on which final image will be shown.
+    opacity : float
+        Opacity of a segmentation mask.
+    """
     segmentation_image = np.zeros_like(image)
-    colors = {}
 
-    for y_index, y in enumerate(segmentation_mask):
-        for x_index, x in enumerate(y):
+    for component_index, component in components.items():
 
-            if x not in colors:
-                generator = np.random.RandomState(seed=int(x))
-                colors[x] = generator.randint(0, 255, 3).astype(np.float32)
-
-            segmentation_image[y_index, x_index] = colors[x]
+        generator = np.random.RandomState(seed=int(component_index))
+        color = generator.randint(0, 255, 3).astype(np.float32)
+        for node in component.nodes:
+            segmentation_image[node] = color
 
     final_image = ((1 - opacity) * image + opacity * segmentation_image) / 255
     axes.imshow(final_image)
-
-
-def draw_graph(graph: nx.Graph, axes: Axes) -> None:
-    vis_graph = gz.Graph()
-
-    for node in graph.nodes:
-        vis_graph.node(f"{node}")
-
-    for edge in graph.edges:
-        vis_graph.edge(str(edge[0]), str(edge[1]))
-
-    filepath = vis_graph.render("graph.dot", format="svg", cleanup=True, engine="dot")
-
-    graph_image = cv2.imread(filepath) / 255
-
-    axes.imshow(graph_image)
