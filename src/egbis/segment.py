@@ -1,3 +1,4 @@
+import itertools
 import logging
 import sys
 
@@ -21,21 +22,21 @@ ComponentIndex = int
 
 
 def is_mergable(
-    partition: np.ndarray,
     component_1: Component,
     component_2: Component,
+    min_connecting_edge_weight: float,
     k: int,
 ) -> bool:
     """Check whether the two components can be merged together.
 
     Parameters
     ----------
-    partition : np.ndarray
-        Image and its partition as a fourth layer.
     component_1 : Component
         First component to be considered.
     component_2 : Component
         Second component to be considered.
+    min_connecting_edge_weight : float
+        Minimum weight among edges connecting components.
     k : int
         Customizable parameter for adjusting degree of attention to
         the size of a component.
@@ -50,73 +51,13 @@ def is_mergable(
     To be considered mergable, the minimum internal difference of
     two components must be bigger than difference between them.
     """
-    external_difference = Component.exd(partition, component_1, component_2)
-
     tao_1 = k / len(component_1.nodes)
     tao_2 = k / len(component_2.nodes)
 
     return not (
-        external_difference
-        > min(component_1.ind(partition) + tao_1, component_1.ind(partition) + tao_2)
+        min_connecting_edge_weight
+        > min(component_1.ind + tao_1, component_1.ind + tao_2)
     )
-
-
-def update_edge_weights(
-    edge_weights: list[tuple[ComponentIndex, ComponentIndex, float]],
-    component_index_1: ComponentIndex,
-    component_index_2: ComponentIndex,
-    merged_component_index: ComponentIndex,
-) -> list[tuple[ComponentIndex, ComponentIndex, float]]:
-    """Update edges during runtime.
-
-    Parameters
-    ----------
-    edge_weights : list[tuple[ComponentIndex, ComponentIndex, float]]
-        Edges to be updated.
-    component_index_1 : ComponentIndex
-        Index of the first component to be considered.
-    component_index_2 : ComponentIndex
-        Index of the second component to be considered.
-    merged_component_index : ComponentIndex
-        Index of the merged component to be considered.
-
-    Returns
-    -------
-    list[tuple[ComponentIndex, ComponentIndex, float]]
-        Updated edge list.
-    """
-    new_edge_weights = []
-
-    for old_component_index_1, old_component_index_2, weight in edge_weights:
-
-        if (
-            old_component_index_1 == component_index_1
-            and old_component_index_2 == component_index_2
-        ):
-            continue
-
-        if (
-            old_component_index_1 == component_index_2
-            and old_component_index_2 == component_index_1
-        ):
-            continue
-
-        if old_component_index_1 in [component_index_1, component_index_2]:
-            new_edge_weights.append(
-                (merged_component_index, old_component_index_2, weight)
-            )
-        elif old_component_index_2 in [component_index_1, component_index_2]:
-            new_edge_weights.append(
-                (old_component_index_1, merged_component_index, weight)
-            )
-        else:
-            new_edge_weights.append(
-                (old_component_index_1, old_component_index_2, weight)
-            )
-
-    new_edge_weights.sort(key=lambda item: item[2])
-
-    return new_edge_weights
 
 
 def update_edge_weights_inplace(
@@ -233,17 +174,18 @@ def segment(
     edge_weights.sort(key=lambda item: item[2])
 
     components: dict[ComponentIndex, Component] = {
-        index: Component(
-            nodes={coordinate},
+        y * image.shape[0]
+        + x: Component(
+            nodes={(y, x)},
             external_edges=initialize_external_edges(
-                coordinate, Directions, image.shape[:-1]
+                (y, x), Directions, image.shape[:-1]
             ),
+            partition=partition,
         )
-        for (index, coordinate) in (
-            (item, tuple(np.argwhere(partition[..., -1] == item)[0]))
-            for item in partition.flatten()
-        )
+        for (y, x) in itertools.product(range(image.shape[0]), range(image.shape[1]))
     }
+
+    unmergable = set()
 
     last_number = len(components.keys())
     for iteration in range(iterations):
@@ -254,14 +196,30 @@ def segment(
             if edge_weight is None:
                 continue
 
-            component_index_1, component_index_2, _ = edge_weight
+            component_index_1, component_index_2, min_connecting_edge_weight = (
+                edge_weight
+            )
+            component_size_1, component_size_2 = len(
+                components[component_index_1]
+            ), len(components[component_index_2])
+
+            key = (
+                component_index_1,
+                component_size_1,
+                component_index_2,
+                component_size_2,
+            )
+
+            if key in unmergable:
+                continue
 
             if not is_mergable(
-                partition=partition,
                 component_1=components[component_index_1],
                 component_2=components[component_index_2],
+                min_connecting_edge_weight=min_connecting_edge_weight,
                 k=k,
             ):
+                unmergable.add(key)
                 continue
 
             maximum_index, minimum_index = sorted(

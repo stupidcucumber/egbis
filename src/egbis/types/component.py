@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from itertools import chain
 
 import networkx as nx
@@ -25,11 +26,23 @@ def intersect_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
     set[Edge]
         Intersection of both provided sets of edges.
     """
-    graph_a = nx.Graph(edges_a)
-    graph_b = nx.Graph(edges_b)
+    result = set()
+    _union = edges_a.union(edges_b)
 
-    intersected_graph: nx.Graph = nx.algorithms.operators.intersection(graph_a, graph_b)
-    return set(intersected_graph.edges)
+    for edge in _union:
+
+        if (edge not in edges_a) and (edge[::-1] not in edges_a):
+            continue
+
+        if (edge not in edges_b) and (edge[::-1] not in edges_b):
+            continue
+
+        if edge[::-1] in result:
+            continue
+
+        result.add(edge)
+
+    return result
 
 
 def union_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
@@ -47,11 +60,17 @@ def union_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
     set[Edge]
         Union of both provided sets of edges.
     """
-    graph_a = nx.Graph(edges_a)
-    graph_b = nx.Graph(edges_b)
+    result = set()
+    _union = edges_a.union(edges_b)
 
-    union_graph: nx.Graph = nx.algorithms.operators.compose(graph_a, graph_b)
-    return set(union_graph.edges)
+    for edge in _union:
+
+        if edge[::-1] in result:
+            continue
+
+        result.add(edge)
+
+    return result
 
 
 def subtract_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
@@ -69,11 +88,16 @@ def subtract_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
     set[Edge]
         Edges that are among edges_a, but not among edges_b.
     """
-    graph_a = nx.Graph(edges_a)
-    graph_b = nx.Graph(edges_b)
+    result = set()
 
-    graph_a.remove_edges_from(graph_b.edges)
-    return set(graph_a.edges)
+    for edge in edges_a:
+
+        if edge in edges_b or edge[::-1] in edges_b:
+            continue
+
+        result.add(edge)
+
+    return result
 
 
 @dataclass
@@ -82,7 +106,18 @@ class Component:
 
     nodes: set[tuple[int, int]]
     external_edges: set[Edge]
+    partition: np.ndarray
     edges: set[Edge] = field(default_factory=lambda: set())
+
+    def __len__(self) -> int:
+        """Magic method for finding size of a component.
+
+        Returns
+        -------
+        int
+            Size of a component.
+        """
+        return len(self.nodes)
 
     def __add__(self, other: Component) -> Component:
         """Megic method for merging two components into one big component.
@@ -106,6 +141,7 @@ class Component:
             external_edges=Component._union_external_edges(
                 self.external_edges, other.external_edges
             ),
+            partition=self.partition,
         )
 
     @staticmethod
@@ -170,40 +206,29 @@ class Component:
         component_2_external_edges = other.external_edges
         return intersect_edges(component_1_external_edges, component_2_external_edges)
 
-    def graph(self, partition: np.ndarray | None = None) -> nx.Graph:
+    @cached_property
+    def graph(self) -> nx.Graph:
         """Construct a graph from the structure of a component.
-
-        Parameters
-        ----------
-        partition : np.ndarray | None
-            Image and its partition as a fourth layer. By
-            default is None, but if provided it will also
-            calculate a weight for each edge in the component.
 
         Returns
         -------
         nx.Graph
             Graph built from the component.
         """
-        if partition is None:
-            return nx.Graph(self.edges)
-
         result = nx.Graph()
 
         for edge in self.edges:
             result.add_edge(
-                edge[0], edge[1], weight=self.calculate_edge_weight(partition, edge)
+                edge[0],
+                edge[1],
+                weight=self.calculate_edge_weight(self.partition, edge),
             )
 
         return result
 
-    def ind(self, partition: np.ndarray) -> float:
+    @cached_property
+    def ind(self) -> float:
         """Find internal difference of the component.
-
-        Parameters
-        ----------
-        partition : np.ndarray
-            Image and its partition as a fourth layer.
 
         Returns
         -------
@@ -216,7 +241,9 @@ class Component:
         is equal to the maximum weight among all weights of a
         Minimum Spanning Tree of a graph of this component.
         """
-        mst: nx.Graph = nx.algorithms.tree.minimum_spanning_tree(self.graph(partition))
+        mst: nx.Graph = nx.algorithms.tree.minimum_spanning_tree(
+            self.graph, algorithm="prim"
+        )
 
         maximum = 0
         for edge in mst.edges(data=True):
