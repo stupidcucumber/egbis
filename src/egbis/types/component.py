@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import cached_property
 from itertools import chain
 
 import networkx as nx
@@ -55,11 +54,34 @@ def union_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
     return set(union_graph.edges)
 
 
+def subtract_edges(edges_a: set[Edge], edges_b: set[Edge]) -> set[Edge]:
+    """Find edges that are among edges_a, but not among edges_b.
+
+    Parameters
+    ----------
+    edges_a : set[Edge]
+        Sets of edges.
+    edges_b : set[Edge]
+        Sets of edges.
+
+    Returns
+    -------
+    set[Edge]
+        Edges that are among edges_a, but not among edges_b.
+    """
+    graph_a = nx.Graph(edges_a)
+    graph_b = nx.Graph(edges_b)
+
+    graph_a.remove_edges_from(graph_b.edges)
+    return set(graph_a.edges)
+
+
 @dataclass
 class Component:
     """Structure that represents a segmentation unit in the algorithm."""
 
     nodes: set[tuple[int, int]]
+    external_edges: set[Edge]
     edges: set[Edge] = field(default_factory=lambda: set())
 
     def __add__(self, other: Component) -> Component:
@@ -81,7 +103,18 @@ class Component:
         return Component(
             nodes=nodes,
             edges=edges,
+            external_edges=Component._union_external_edges(
+                self.external_edges, other.external_edges
+            ),
         )
+
+    @staticmethod
+    def _union_external_edges(
+        external_edges_1: set[Edge], external_edges_2: set[Edge]
+    ) -> set[Edge]:
+        all_edges = union_edges(external_edges_1, external_edges_2)
+        internal_edges = intersect_edges(external_edges_1, external_edges_2)
+        return subtract_edges(all_edges, internal_edges)
 
     def _count_edges(self, node: tuple[int, int]) -> int:
         return sum([1 for edge in self.edges if node in edge])
@@ -136,30 +169,6 @@ class Component:
         component_1_external_edges = self.external_edges
         component_2_external_edges = other.external_edges
         return intersect_edges(component_1_external_edges, component_2_external_edges)
-
-    @cached_property
-    def external_edges(self) -> set[Edge]:
-        """Get external edges of a component.
-
-        Returns
-        -------
-        set[Edge]
-            All external edges of the component.
-        """
-        result = []
-        for boundary_node in self.boundary_nodes():
-            for direction in Directions:
-                outer_node = (
-                    boundary_node[0] + direction[0],
-                    boundary_node[1] + direction[1],
-                )
-                if (boundary_node, outer_node) in self.edges or (
-                    outer_node,
-                    boundary_node,
-                ) in self.edges:
-                    continue
-                result.append((boundary_node, outer_node))
-        return set(result)
 
     def graph(self, partition: np.ndarray | None = None) -> nx.Graph:
         """Construct a graph from the structure of a component.

@@ -4,7 +4,7 @@ import sys
 import numpy as np
 from tqdm import tqdm
 
-from egbis.types.component import Component
+from egbis.types.component import Component, Directions, Edge
 from egbis.utils.graph import calculate_edges_weights, ndarray_partition_from_image
 
 logging.basicConfig(
@@ -167,6 +167,44 @@ def update_edge_weights_inplace(
             )
 
 
+def initialize_external_edges(
+    node: tuple[int, int], directions: list[tuple[int, int]], bounds: tuple[int, int]
+) -> set[Edge]:
+    """Initialize external edges.
+
+    Parameters
+    ----------
+    node : tuple[int, int]
+        Node that needs an initialization of external edges.
+    directions : list[tuple[int, int]]
+        Directions in which to search for external edges.
+    bounds : tuple[int, int]
+        Bounds in which external edges.
+
+    Returns
+    -------
+    set[Edge]
+        External edges for initialization.
+    """
+    result = set()
+
+    for direction in directions:
+
+        external_node = (node[0] + direction[0], node[1] + direction[1])
+
+        if all(
+            [
+                external_node[0] >= 0,
+                external_node[0] < bounds[0],
+                external_node[1] >= 0,
+                external_node[1] < bounds[1],
+            ]
+        ):
+            result.add((node, external_node))
+
+    return result
+
+
 def segment(
     image: np.ndarray, iterations: int, k: int = 1
 ) -> dict[ComponentIndex, Component]:
@@ -196,12 +234,15 @@ def segment(
 
     components: dict[ComponentIndex, Component] = {
         index: Component(
-            nodes={
-                tuple(coordinate)
-                for coordinate in np.argwhere(partition[..., -1] == index)
-            }
+            nodes={coordinate},
+            external_edges=initialize_external_edges(
+                coordinate, Directions, image.shape[:-1]
+            ),
         )
-        for index in partition.flatten()
+        for (index, coordinate) in (
+            (item, tuple(np.argwhere(partition[..., -1] == item)[0]))
+            for item in partition.flatten()
+        )
     }
 
     last_number = len(components.keys())
