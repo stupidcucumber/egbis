@@ -5,7 +5,7 @@ requires = [
 build-backend = "hatchling.build"
 
 [project]
-name = ""
+name = "egbis"
 version = "0.0.1"
 authors = [
     {name="Ihor Kostiuk", email="ihor.kostiuk@knu.ua"},
@@ -17,7 +17,14 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
-dependencies = []
+dependencies = [
+    "networkx[default]",
+    "numpy",
+
+]
+
+[tool.hatch.build.targets.wheel]
+      packages = ["src/egbis"]
 
 [tool.flake8]
 max-line-length=88
