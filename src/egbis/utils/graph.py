@@ -1,5 +1,8 @@
-import networkx as nx
+from itertools import product
+
 import numpy as np
+
+from egbis.types.component import ComponentIndex
 
 
 def is_inside(node: tuple[int, int], shape: tuple[int, int]) -> bool:
@@ -38,100 +41,46 @@ def intensity(pixel: np.ndarray) -> float:
     return np.sum(pixel) / 3
 
 
-def generate_graph_from_image(image: np.ndarray, directions: list[tuple]) -> nx.Graph:
-    """Generate graph structure from the image.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Image in the format of (H, W, C) that needs to be represented as a graph.
-    directions : list[tuple]
-        Directions in which connect pixels to each other in the graph. Possible
-        values can be (1, 1), (0, 1), (1, 0), (-1, 0).
-
-    Returns
-    -------
-    nx.Graph
-        Graph representation of an image using NetworkX package.
-    """
-    graph = nx.Graph()
-
-    for y, row in enumerate(image):
-        for x, pixel_value in enumerate(row):
-            graph.add_node((y, x), pixel=pixel_value)
-
-            for direction in directions:
-                u = (y, x)
-                v = (y + direction[0], x + direction[1])
-
-                if is_inside(v, image.shape):
-                    graph.add_edge(
-                        u, v, weight=abs(intensity(image[u]) - intensity(image[v]))
-                    )
-
-    return graph
-
-
 def calculate_edges_weights(
-    partition: np.ndarray, directions: list[tuple[int, int]]
-) -> list[tuple[int, int, float]]:
+    image: np.ndarray, directions: list[tuple[int, int]]
+) -> list[tuple[ComponentIndex, ComponentIndex, float]]:
     """Calculate edges weights.
 
     Parameters
     ----------
-    partition : np.ndarray
-        Image with partitions as a 4th layer.
+    image : np.ndarray
+        Image to segment.
     directions : list[tuple[int, int]]
         Directions of the edges to look for.
 
     Returns
     -------
-    list[tuple[int, int, float]]
-        Components it connects and the weight itself.
+    list[tuple[ComponentIndex, ComponentIndex, float]]
+        Components it connects and the edge weight itself.
     """
     result = []
 
-    for y_index, row in enumerate(partition):
-        for x_index, _ in enumerate(row):
+    height, width = image.shape[:-1]
 
-            for direction in directions:
+    for y, x in product(range(height), range(width)):
 
-                if is_inside(
-                    (y_index + direction[0], x_index + direction[1]), partition.shape
-                ):
-                    pixel_a = partition[y_index, x_index, :-1]
-                    pixel_b = partition[
-                        y_index + direction[0], x_index + direction[1], :-1
-                    ]
-                    result.append(
-                        (
-                            partition[y_index, x_index, -1],
-                            partition[
-                                y_index + direction[0], x_index + direction[1], -1
-                            ],
-                            abs(intensity(pixel_a) - intensity(pixel_b)),
-                        )
-                    )
+        for delta_y, delta_x in directions:
 
-    return result
+            other_y = y + delta_y
+            other_x = x + delta_x
 
+            if not is_inside((other_y, other_x), (height, width)):
+                continue
 
-def ndarray_partition_from_image(image: np.ndarray) -> np.ndarray:
-    """Generate a partition from image.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        Image to generate partitions from.
-
-    Returns
-    -------
-    np.ndarray
-        Image with partitions as the fourth layer.
-    """
-    result = np.zeros([*image.shape[:-1], 4])
-
-    result[..., :-1] = image
-    result[..., -1] = np.arange(0, np.prod(image.shape[:-1])).reshape(image.shape[:-1])
+            result.append(
+                (
+                    y * height + x,
+                    other_y * height + other_x,
+                    abs(
+                        intensity(pixel=image[y, x])
+                        - intensity(pixel=image[other_y, other_x])
+                    ),
+                )
+            )
 
     return result

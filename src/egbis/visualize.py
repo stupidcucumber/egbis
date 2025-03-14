@@ -21,13 +21,19 @@ def draw_components_partition(
         Opacity of a segmentation mask.
     """
     segmentation_image = np.zeros_like(image)
+    visited_indeces = set()
 
     for component_index, component in components.items():
+
+        if component_index in visited_indeces:
+            continue
 
         generator = np.random.RandomState(seed=int(component_index))
         color = generator.randint(0, 255, 3).astype(np.float32)
         for node in component.nodes:
             segmentation_image[node] = color
+
+        visited_indeces = visited_indeces.union(component.component_indexes)
 
     final_image = ((1 - opacity) * image + opacity * segmentation_image) / 255
     axes.imshow(final_image)
