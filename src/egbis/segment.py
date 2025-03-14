@@ -79,6 +79,9 @@ def segment(
 
         component_index_1, component_index_2, min_connecting_edge_weight = edge_weight
 
+        if components[component_index_1] == components[component_index_2]:
+            continue
+
         if not is_mergable(
             component_1=components[component_index_1],
             component_2=components[component_index_2],
